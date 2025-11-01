@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  audio-to-text:
+    build: .
+    container_name: audio-to-text-container
+    volumes:
+      # Mount input directory for audio files
+      - ./input:/app/input
+      # Mount output directory for transcription results
+      - ./output:/app/output
+      # Mount current directory for easy access to script
+      - .:/app/workspace
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Override the default command to make it interactive
+    command: ["python", "audio_to_text.py", "--help"]
+    # Keep container running for interactive use
+    tty: true
+    stdin_open: true
