@@ -1,97 +1,43 @@
-# Audio to Text - Docker Container
+# Audio to Text
 
-Questo progetto converte file audio in testo utilizzando il modello Whisper di OpenAI, tutto containerizzato con Docker.
+Questo progetto converte file audio in testo utilizzando il modello Whisper di OpenAI. 
+Scansiona automaticamente la cartella `input/` e salva le trascrizioni nella cartella `output/`.
 
-## Prerequisiti
+## Installazione
 
-- Docker
-- Docker Compose
+Assicurati di avere Python 3 installato e installa le dipendenze:
 
-## Struttura del progetto
-
+```bash
+pip install -r requirements.txt
 ```
-audio-to-text/
-├── audio_to_text.py      # Script principale
-├── Dockerfile            # Configurazione Docker
-├── docker-compose.yml    # Configurazione Docker Compose
-├── requirements.txt      # Dipendenze Python
-├── run.sh               # Script di avvio (Linux/Mac)
-├── run.bat              # Script di avvio (Windows)
-├── input/               # Directory per i file audio
-└── output/              # Directory per i risultati
-```
+
+> [!NOTE]
+> È necessario installare `ffmpeg` sul sistema affinché Whisper possa elaborare i file audio.
+> - **Linux (Ubuntu/Debian):** `sudo apt install ffmpeg`
+> - **macOS:** `brew install ffmpeg`
+> - **Windows:** installare tramite scoop/winget o scaricare da ffmpeg.org.
 
 ## Utilizzo
 
-### 1. Build del container
+1. Inserisci i file audio (es. `.mp3`, `.wav`, `.m4a`, ecc.) nella cartella `input/`.
+2. Avvia lo script:
+   ```bash
+   python audio_to_text.py
+   ```
+3. Troverai i file di testo corrispondenti nella cartella `output/`.
 
-```bash
-docker-compose build
+## Configurazione
+
+È possibile personalizzare il comportamento tramite il file `config.json`:
+
+```json
+{
+  "model": "base",
+  "language": "it",
+  "overwrite": false
+}
 ```
 
-### 2. Esecuzione
-
-#### Opzione A: Usando gli script di avvio
-
-**Windows:**
-```cmd
-run.bat input/audio.mp3
-run.bat input/audio.wav --model large
-run.bat input/audio.m4a --output output/transcription.txt
-```
-
-**Linux/Mac:**
-```bash
-chmod +x run.sh
-./run.sh input/audio.mp3
-./run.sh input/audio.wav --model large
-./run.sh input/audio.m4a --output output/transcription.txt
-```
-
-#### Opzione B: Usando Docker Compose direttamente
-
-```bash
-# Trascrizione base
-docker-compose run --rm audio-to-text input/audio.mp3
-
-# Con modello specifico
-docker-compose run --rm audio-to-text input/audio.wav --model large
-
-# Con file di output
-
-
-```
-
-#### Opzione C: Usando Docker direttamente
-
-```bash
-# Build dell'immagine
-docker build -t audio-to-text .
-
-# Esecuzione
-docker run --rm -v "$(pwd)/input:/app/input" -v "$(pwd)/output:/app/output" audio-to-text input/audio.mp3
-```
-
-## Modelli disponibili
-
-- `tiny`: Più veloce, meno accurato
-- `base`: Bilanciato (default)
-- `small`: Più accurato, più lento
-- `medium`: Ancora più accurato
-- `large`: Più accurato, più lento
-
-## Formati audio supportati
-
-- MP3
-- WAV
-- M4A
-- FLAC
-- OGG
-- E molti altri formati supportati da FFmpeg
-
-## Note
-
-- I file audio vanno messi nella directory `input/`
-- I risultati vengono salvati nella directory `output/`
-- Il primo avvio potrebbe richiedere più tempo per scaricare il modello Whisper
-- I modelli più grandi (`large`) richiedono più memoria e tempo di elaborazione
+* `model`: Dimensione del modello Whisper (`tiny`, `base`, `small`, `medium`, `large`). Più è grande, più è accurato ma richiede più risorse e tempo.
+* `language`: La lingua dell'audio (es. `it` per l'italiano, `en` per l'inglese, oppure `null` per il rilevamento automatico).
+* `overwrite`: Se impostato su `false`, i file audio già elaborati in precedenza verranno saltati per risparmiare tempo.

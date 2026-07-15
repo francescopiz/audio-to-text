@@ -1,217 +1,120 @@
 #!/usr/bin/env python3
 """
-Simple script to convert audio files to text using OpenAI's Whisper model.
-Supports various audio formats including MP3, WAV, M4A, FLAC, etc.
+Simple script to convert all audio files in the 'input' directory to text
+using OpenAI's Whisper model, saving the transcriptions to the 'output' directory.
+Configuration is loaded from 'config.json'.
 """
 
-import os
-import sys
-import argparse
-import warnings
-import whisper
-import signal
 import json
+import sys
 from pathlib import Path
-from datetime import datetime
+
+import whisper
+
+# Supported audio extensions
+AUDIO_EXTENSIONS = {'.mp3', '.wav', '.m4a', '.flac', '.ogg', '.webm', '.aac', '.opus', '.wma'}
 
 
-# Global variable to track if process was interrupted
-interrupted = False
-
-def signal_handler(signum, frame):
-    """Handle Ctrl+C interruption gracefully."""
-    global interrupted
-    print(f"\n\n⚠️  Processo interrotto dall'utente (Ctrl+C)")
-    print("💾 Salvataggio del progresso parziale...")
-    interrupted = True
-
-def save_partial_progress(audio_file, model_size, partial_text, progress_file):
-    """Save partial transcription progress."""
-    progress_data = {
-        "audio_file": audio_file,
-        "model_size": model_size,
-        "partial_text": partial_text,
-        "timestamp": datetime.now().isoformat(),
-        "status": "interrupted"
+def load_config():
+    """Load configuration from config.json, falling back to defaults if not found."""
+    default_config = {
+        "model": "base",
+        "language": "it",
+        "overwrite": False
     }
-    
-    with open(progress_file, 'w', encoding='utf-8') as f:
-        json.dump(progress_data, f, ensure_ascii=False, indent=2)
-    
-    print(f"📁 Progresso salvato in: {progress_file}")
 
-def convert_audio_to_text(audio_file_path, model_size="base", output_file=None, save_progress=True):
-    """
-    Convert audio file to text using Whisper model with progress saving.
-    
-    Args:
-        audio_file_path (str): Path to the audio file
-        model_size (str): Whisper model size (tiny, base, small, medium, large)
-        output_file (str): Optional output file path for the text
-        save_progress (bool): Whether to save progress during transcription
-    
-    Returns:
-        str: Transcribed text
-    """
-    global interrupted
-    
-    # Create progress file name
-    base_name = Path(audio_file_path).stem
-    progress_file = f"output/{base_name}_progress.json"
-    
+    config_path = Path("config.json")
+    if not config_path.exists():
+        print("⚠️  config.json non trovato, uso della configurazione di default.")
+        return default_config
+
     try:
-        # Check if audio file exists
-        if not os.path.exists(audio_file_path):
-            raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
-        
-        print(f"Loading Whisper model '{model_size}'...")
-        model = whisper.load_model(model_size)
-        
-        print(f"Transcribing audio file: {audio_file_path}")
-        print("This may take a while depending on the audio length and model size...")
-        print("💡 Premi Ctrl+C per interrompere (il progresso verrà salvato automaticamente)")
-        
-        # Set up signal handler for graceful interruption
-        signal.signal(signal.SIGINT, signal_handler)
-        
-        # Transcribe the audio
-        result = model.transcribe(audio_file_path)
-        
-        # Check if process was interrupted
-        if interrupted:
-            partial_text = result.get("text", "")
-            if save_progress and partial_text:
-                save_partial_progress(audio_file_path, model_size, partial_text, progress_file)
-            
-            print(f"\n📝 Testo trascritto fino all'interruzione:")
-            print("="*50)
-            print(partial_text)
-            print("="*50)
-            return partial_text
-        
-        transcribed_text = result["text"]
-        
-        # Print the result
-        print("\n" + "="*50)
-        print("TRANSCRIPTION RESULT:")
-        print("="*50)
-        print(transcribed_text)
-        print("="*50)
-        
-        # Save to file if output file is specified
-        if output_file:
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(transcribed_text)
-            print(f"\nTranscription saved to: {output_file}")
-        
-        # Clean up progress file if transcription completed successfully
-        if os.path.exists(progress_file):
-            os.remove(progress_file)
-            print("🧹 File di progresso rimosso (trascrizione completata)")
-        
-        return transcribed_text
-        
-    except KeyboardInterrupt:
-        # Handle Ctrl+C explicitly - try to save whatever we have
-        print(f"\n\n⚠️  Processo interrotto dall'utente (Ctrl+C)")
-        print("💾 Tentativo di salvataggio del progresso...")
-        
-        # Try to get partial results if possible
-        try:
-            # This might not work if the model is in the middle of processing
-            partial_text = "Trascrizione interrotta - nessun testo parziale disponibile"
-            if save_progress:
-                save_partial_progress(audio_file_path, model_size, partial_text, progress_file)
-            print("📁 Progresso salvato (testo parziale non disponibile)")
-        except:
-            print("❌ Impossibile salvare il progresso parziale")
-        
-        return None
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            # Merge with defaults to ensure all keys exist
+            return {**default_config, **config}
     except Exception as e:
-        print(f"Error during transcription: {str(e)}")
-        return None
+        print(f"❌ Errore nel caricamento di config.json: {e}. Uso i default.")
+        return default_config
 
-
-def show_progress(progress_file):
-    """Show saved progress from interrupted transcription."""
-    try:
-        if not os.path.exists(progress_file):
-            print(f"❌ File di progresso non trovato: {progress_file}")
-            return
-        
-        with open(progress_file, 'r', encoding='utf-8') as f:
-            progress_data = json.load(f)
-        
-        print(f"\n📊 PROGRESSO SALVATO:")
-        print("="*50)
-        print(f"File audio: {progress_data['audio_file']}")
-        print(f"Modello: {progress_data['model_size']}")
-        print(f"Timestamp: {progress_data['timestamp']}")
-        print(f"Status: {progress_data['status']}")
-        print("\n📝 Testo trascritto:")
-        print("-" * 30)
-        print(progress_data['partial_text'])
-        print("-" * 30)
-        
-    except Exception as e:
-        print(f"❌ Errore nel leggere il progresso: {str(e)}")
 
 def main():
-    """Main function to handle command line arguments and run transcription."""
-    parser = argparse.ArgumentParser(
-        description="Convert audio files to text using OpenAI's Whisper model",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python audio_to_text.py audio.mp3
-  python audio_to_text.py audio.wav --model large
-  python audio_to_text.py audio.m4a --output transcription.txt
-  python audio_to_text.py audio.mp3 --model small --output result.txt
-  python audio_to_text.py --show-progress output/audio_progress.json
-        """
-    )
-    
-    parser.add_argument(
-        "audio_file",
-        nargs='?',
-        help="Path to the audio file to transcribe"
-    )
-    
-    parser.add_argument(
-        "--model", "-m",
-        choices=["tiny", "base", "small", "medium", "large"],
-        default="base",
-        help="Whisper model size (default: base). Larger models are more accurate but slower."
-    )
-    
-    parser.add_argument(
-        "--output", "-o",
-        help="Output file path to save the transcription (optional)"
-    )
-    
-    parser.add_argument(
-        "--show-progress",
-        help="Show saved progress from interrupted transcription"
-    )
-    
-    args = parser.parse_args()
-    
-    # Handle show progress option
-    if args.show_progress:
-        show_progress(args.show_progress)
+    # 1. Load config
+    config = load_config()
+    model_size = config.get("model", "base")
+    language = config.get("language", "null")
+    overwrite = config.get("overwrite", False)
+
+    # 2. Check input and output directories
+    input_dir = Path("input")
+    output_dir = Path("output")
+
+    input_dir.mkdir(exist_ok=True)
+    output_dir.mkdir(exist_ok=True)
+
+    # 3. Find audio files in input directory
+    audio_files = [
+        p for p in input_dir.iterdir()
+        if p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS
+    ]
+
+    if not audio_files:
+        print("ℹ️  Nessun file audio trovato nella cartella 'input/'.")
+        print(f"Supportati: {', '.join(sorted(AUDIO_EXTENSIONS))}")
+        print("Inserisci i tuoi file audio nella cartella 'input' e riavvia lo script.")
         return
-    
-    # Check if audio file is provided
-    if not args.audio_file:
-        parser.error("audio_file is required unless using --show-progress")
-    
-    # Convert audio to text
-    result = convert_audio_to_text(args.audio_file, args.model, args.output)
-    
-    if result is None:
+
+    print(f"📂 Trovati {len(audio_files)} file audio da elaborare.")
+
+    # Filter files to process depending on overwrite setting
+    files_to_process = []
+    for audio_file in audio_files:
+        output_file = output_dir / f"{audio_file.stem}.txt"
+        if output_file.exists() and not overwrite:
+            print(f"⏭️  Salto '{audio_file.name}' (già trascritto in '{output_file.name}')")
+        else:
+            files_to_process.append((audio_file, output_file))
+
+    if not files_to_process:
+        print("✅ Tutti i file sono già stati trascritti. Niente da fare.")
+        return
+
+    # 4. Load Whisper model
+    print(f"🤖 Caricamento del modello Whisper '{model_size}'...")
+    try:
+        model = whisper.load_model(model_size)
+    except Exception as e:
+        print(f"❌ Errore durante il caricamento del modello Whisper: {e}")
         sys.exit(1)
-    else:
-        print("\nTranscription completed successfully!")
+
+    # 5. Process files
+    for idx, (audio_file, output_file) in enumerate(files_to_process, 1):
+        print(f"\n[{idx}/{len(files_to_process)}] Elaborazione di: {audio_file.name}")
+
+        try:
+            # Prepare transcribe arguments
+            transcribe_args = {}
+            if language:
+                transcribe_args["language"] = language
+
+            print(f"⏳ Trascrizione in corso (lingua: {language or 'rilevamento automatico'})...")
+            result = model.transcribe(str(audio_file), **transcribe_args)
+
+            transcribed_text = result.get("text", "").strip()
+
+            # Save transcription
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(transcribed_text)
+
+            print(f"💾 Trascrizione salvata con successo in: {output_file}")
+
+        except KeyboardInterrupt:
+            print("\n⚠️  Operazione interrotta dall'utente. Uscità...")
+            break
+        except Exception as e:
+            print(f"❌ Errore durante la trascrizione di {audio_file.name}: {e}")
+
+    print("\n🎉 Elaborazione terminata!")
 
 
 if __name__ == "__main__":
